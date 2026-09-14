@@ -17,11 +17,54 @@ function writeAppLog($message)
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
 
+if ($method === 'GET' && $action === 'logs') {
+    // 最近日志查询：供前端“查看日志”使用
+    $serviceId = isset($_GET['service_id']) ? (int) $_GET['service_id'] : 0;
+    $limit = isset($_GET['limit']) ? min(max((int) $_GET['limit'], 1), 200) : 50;
+
+    try {
+        if ($serviceId > 0) {
+            $stmt = $pdo->prepare(
+                "SELECT l.id, l.service_id, s.name AS service_name, l.action, l.message, l.created_at
+                 FROM system_logs l
+                 LEFT JOIN services s ON s.id = l.service_id
+                 WHERE l.service_id = ?
+                 ORDER BY l.id DESC
+                 LIMIT $limit"
+            );
+            $stmt->execute([$serviceId]);
+        } else {
+            $stmt = $pdo->query(
+                "SELECT l.id, l.service_id, s.name AS service_name, l.action, l.message, l.created_at
+                 FROM system_logs l
+                 LEFT JOIN services s ON s.id = l.service_id
+                 ORDER BY l.id DESC
+                 LIMIT $limit"
+            );
+        }
+        $logs = $stmt->fetchAll();
+        echo json_encode([
+            'status' => 'success',
+            'data' => $logs,
+            'server_time' => date('Y-m-d H:i:s'),
+        ]);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+    exit;
+}
+
 if ($method === 'GET' && $action === 'list') {
     try {
         $stmt = $pdo->query("SELECT * FROM services ORDER BY id ASC");
         $services = $stmt->fetchAll();
-        echo json_encode(['status' => 'success', 'data' => $services]);
+        // server_time 供前端展示“最近一次成功更新时间”
+        echo json_encode([
+            'status' => 'success',
+            'data' => $services,
+            'server_time' => date('Y-m-d H:i:s'),
+        ]);
     } catch (Exception $e) {
         http_response_code(500);
         echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
